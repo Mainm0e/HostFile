@@ -1,6 +1,8 @@
 import http.server
 import socketserver
 import os
+import asyncio
+import websockets
 
 PORT = 8000
 DIRECTORY = "downloads"
@@ -18,6 +20,15 @@ if not os.path.isfile(file_path):
     with open(file_path, 'w') as f:
         f.write(CONTENT)
     print(f"Created file: {file_path}")
+
+# WebSocket server to notify clients of updates
+async def notify_clients():
+    async with websockets.serve(handler, "localhost", 8765):
+        await asyncio.Future()  # run forever
+
+async def handler(websocket, path):
+    # Notify client of update
+    await websocket.send("update")
 
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -45,6 +56,14 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>File Download</title>
+            <script>
+                var ws = new WebSocket("ws://localhost:8765");
+                ws.onmessage = function(event) {{
+                    if (event.data === 'update') {{
+                        location.reload();
+                    }}
+                }};
+            </script>
         </head>
         <body>
             <h1>Download Files</h1>
@@ -55,8 +74,10 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         </html>
         """
 
-# Do not change the working directory here
+# Start WebSocket server
+asyncio.ensure_future(notify_clients())
 
+# Start HTTP server
 with socketserver.TCPServer(("", PORT), CustomHandler) as httpd:
     print(f"Serving HTTP on port {PORT} (http://localhost:{PORT}/)")
     httpd.serve_forever()
